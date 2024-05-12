@@ -34,5 +34,20 @@ namespace falkolib{
 		int index;
 		double radius;
 		double orientation;
+		double score;
+
+		// Triangle variables
+		double left_r; 
+		int left_index;
+		double right_r;
+		int right_index;
+
+		double left_x, left_y;
+		double right_x, right_y;
+
+		// Area variables
+		double area;
+		double base_len;
+		double base_height;
 	};
 }

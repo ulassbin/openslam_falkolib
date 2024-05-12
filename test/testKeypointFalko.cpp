@@ -37,7 +37,7 @@ using namespace std;
 using namespace falkolib;
 
 int main(int argc, char** argv) {
-	FALKOExtractor fe;
+	falkolib::FALKOExtractor fe;
 	fe.setMinExtractionRange(1);
 	fe.setMaxExtractionRange(30);
 	fe.enableSubbeam(true);

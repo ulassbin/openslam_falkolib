@@ -40,6 +40,14 @@ namespace falkolib {
 		 * @brief Extract FALKO keypoints from a given scan 	 
 		 * @param scan input laser scan
 		 * @param features FALKO keypoint extracted from given scan
+		 * @param normalize_scores parameter for score normalization
+		 */
+		void extract(const LaserScan& scan, std::vector<FALKO>& keypoints, bool normalize_scores);
+
+		/**
+		 * @brief Extract FALKO keypoints from a given scan 	 
+		 * @param scan input laser scan
+		 * @param features FALKO keypoint extracted from given scan
 		 */
 		void extract(const LaserScan& scan, std::vector<FALKO>& keypoints);
 
@@ -118,7 +126,7 @@ namespace falkolib {
 		double getCornerOrientation(const std::vector<Point2d>& neigh, int midIndex);
 
 		/** @brief Non-Maxima-Suppression function for keypoint extraction*/
-		void NMSKeypoint(const std::vector<int>& scores, const LaserScan& scan, unsigned int ibeg, unsigned int iend, double radius, int minval, std::vector<int>& peaks);
+		void NMSKeypoint(const std::vector<double>& scores, const LaserScan& scan, unsigned int ibeg, unsigned int iend, double radius, int minval, std::vector<int>& peaks);
 
 		/** @brief compute corner position with subbeam accuracy*/
 		void subBeamCorner(const LaserScan& scan, int index, double radius, Point2d& p);

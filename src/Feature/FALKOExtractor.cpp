@@ -18,6 +18,7 @@
  * along with FALKOLib.  If not, see <http://www.gnu.org/licenses/>.
  */
 #include <falkolib/Feature/FALKOExtractor.h>
+#include <iostream>
 
 using namespace std;
 
@@ -36,9 +37,20 @@ namespace falkolib {
         gridSectors = 16;
     }
 
+
     void FALKOExtractor::extract(const LaserScan& scan, std::vector<FALKO>& keypoints) {
+        extract(scan, keypoints, false);
+    }
+
+    void FALKOExtractor::extract(const LaserScan& scan, std::vector<FALKO>& keypoints, bool normalize_scores) {
         const int numBeams = scan.getNumBeams();
-        vector<int> scores(numBeams, -10);
+        vector<double> scores(numBeams, -10);
+        vector<double> areas(numBeams, -10);
+        vector<double> base_len(numBeams, -10);
+        vector<double> base_height(numBeams, -10);
+
+            vector<pair<double,double>> right(numBeams, pair<double,double>(0,0));
+        vector<pair<double,double>> left(numBeams, pair<double,double>(0,0));
         vector<Point2d> neigh;
         vector<double> radius(numBeams);
         int neighSize;
@@ -54,10 +66,15 @@ namespace falkolib {
         vector<int> peaks;
         vector<int> neighCircularIndexesL;
         vector<int> neighCircularIndexesR;
-
+        int av_neigh_L = 0;
+        int av_neigh_R = 0;
+        int out_of_range = 0;
+        int no_neighbours = 0;
+        int trio_len = 0;
         for (int ind = 0; ind < numBeams; ++ind) {
             if (scan.ranges[ind] < minExtractionRange || scan.ranges[ind] > maxExtractionRange) {
                 scores[ind] = -10;
+                out_of_range++;
                 continue;
             }
             neigh.clear();
@@ -67,17 +84,27 @@ namespace falkolib {
 
             neighSizeL = midIndex;
             neighSizeR = neighSize - midIndex - 1;
-
+            av_neigh_R += neighSizeR;
+            av_neigh_L += neighSizeL;
             if (neighSizeL < neighMinPoint || neighSizeR < neighMinPoint) {
                 scores[ind] = -10;
+                no_neighbours++;
                 continue;
             }
 
             triangleBLength = pointsDistance(neigh.front(), neigh.back());
-            triangleHLength = std::abs(signedTriangleArea(neigh[midIndex], neigh.front(), neigh.back())) / triangleBLength;
+            double area = signedTriangleArea(neigh[midIndex], neigh.front(), neigh.back());
+            triangleHLength = std::abs(area) / triangleBLength;
+            areas[ind] = area;
+            base_len[ind] = triangleBLength;
+            base_height[ind] = triangleHLength;
+            right[ind] = pair<double,double>(neigh.front()[0], neigh.front()[1]);
+            left[ind] = pair<double,double>(neigh.back()[0], neigh.back()[1]);
 
+            //std::cout<<ind<< " length "<<triangleBLength<<" height "<<triangleHLength<<std::endl;
             if (triangleBLength < (radius[ind] / bRatio) || triangleHLength < (radius[ind] / bRatio)) {
                 scores[ind] = -10;
+                trio_len++;
                 continue;
             }
 
@@ -95,17 +122,24 @@ namespace falkolib {
 
             scoreL = 0;
             scoreR = 0;
-
+            uint64_t cL(0), cR(0);
             for (int i = midIndex - 1; i >= 0; --i) {
                 for (int j = i; j >= 0; --j) {
+                    cL++;
                     scoreL += circularSectorDistance(neighCircularIndexesL[i], neighCircularIndexesL[j], gridSectors);
                 }
             }
 
             for (int i = midIndex + 1; i < neighSize; ++i) {
                 for (int j = i; j < neighSize; ++j) {
+                    cR++;
                     scoreR += circularSectorDistance(neighCircularIndexesR[i - midIndex - 1], neighCircularIndexesR[j - midIndex - 1], gridSectors);
                 }
+            }
+
+            if(normalize_scores) {
+                scoreL = (cL>0) ? scoreL / cL : 1000;
+                scoreR = (cR>0) ? scoreR / cR : 1000;
             }
 
             scores[ind] = scoreL + scoreR;
@@ -114,6 +148,13 @@ namespace falkolib {
                 scoreMax = scores[ind];
             }
         }
+
+
+        av_neigh_L = av_neigh_L / (numBeams-out_of_range);
+        av_neigh_R = av_neigh_R / (numBeams-out_of_range);
+        std::cout<< "Average Neighs "<<av_neigh_L<<", "<<av_neigh_R<<std::endl;
+        std::cout<<"Beams: "<<numBeams<<" OutRange: "<<out_of_range<<" NoNeighs: "<<no_neighbours 
+            <<" TriangleFactor: "<<trio_len<<" Remaining: "<<(numBeams-out_of_range-no_neighbours-trio_len)<<std::endl;
 
         for (int ind = 0; ind < numBeams; ++ind) {
             if (scores[ind] < 0) {
@@ -129,7 +170,22 @@ namespace falkolib {
             kp.index = peaks[i];
             kp.orientation = thetaCorner[peaks[i]];
             kp.radius = radius[peaks[i]];
-
+            kp.score = scores[peaks[i]];
+            
+            kp.area = areas[peaks[i]];
+            std::cout<<"Peak "<< peaks[i] <<" area: "<< areas[peaks[i]]<<std::endl;
+            kp.base_len = base_len[peaks[i]];
+            kp.base_height = base_height[peaks[i]];
+            kp.right_x = right[peaks[i]].first;
+            kp.right_y = right[peaks[i]].second;
+            kp.left_x = left[peaks[i]].first;
+            kp.left_y = left[peaks[i]].second;
+            
+            std::cout<<"Keypoint " << scan.points[kp.index][0]<<", "<< scan.points[kp.index][1]<< "right "<<kp.right_x << ", "<<kp.right_y<< " left "<< kp.left_x<<", "<< kp.left_y << std::endl;
+            double d1 = std::hypot(scan.points[kp.index][0] - kp.right_x, scan.points[kp.index][1]-kp.right_y);
+            double d2 = std::hypot(scan.points[kp.index][0] - kp.left_x, scan.points[kp.index][1]-kp.left_y);
+            double d3 = std::hypot(kp.left_x - kp.right_x, kp.left_y-kp.right_y);
+            std::cout<<"D1 "<<d1<<" D2 "<<d2<<" D3 "<<d3<<std::endl;
             if (subbeam) {
                 subBeamCorner(scan, peaks[i], radius[peaks[i]], kp.point);
             } else {
@@ -175,9 +231,11 @@ namespace falkolib {
         double theta = atan2(ori(1), ori(0));
     }
 
-    void FALKOExtractor::NMSKeypoint(const std::vector<int>& scores, const LaserScan& scan, unsigned int ibeg, unsigned int iend, double radius, int minval, std::vector<int>& peaks) {
-        unsigned i, imax;
-        unsigned j, jbeg, jend, jmax;
+    void FALKOExtractor::NMSKeypoint(const std::vector<double>& scores, const LaserScan& scan, unsigned int ibeg, unsigned int iend, double radius, int minval, std::vector<int>& peaks) {
+        int i;
+        double imax;
+        unsigned j, jbeg, jend;
+        double jmax;
         std::vector<int> candidates;
         peaks.clear();
 
