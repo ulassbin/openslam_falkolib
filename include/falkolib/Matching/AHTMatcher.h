@@ -24,6 +24,7 @@
 #include <vector>
 #include <falkolib/Feature/Descriptor.h>
 #include <falkolib/Feature/Keypoint.h>
+#include <falkolib/Common/TwoDTransform.h>
 
 namespace falkolib {
 
@@ -59,14 +60,10 @@ namespace falkolib {
 			thetaMax = 0;
 		};
 
-		/**
-		 * @brief match keypoints between two sets using AHT matcher
-		 * @param v1 first set of keypoints
-		 * @param v2 second set of keypoints
-		 * @param match matching vector representing associations, pair.first corresponds to v1 and pair.second corresponds to v2
-		 * @return number of valid association in match
-		 */
-		int match(const std::vector<T>& v1, const std::vector<T>& v2, std::vector<std::pair<int, int> >& match) {
+	    int match(const std::vector<T>& v1, const std::vector<T>& v2, std::vector<std::pair<int, int> >& match) override {
+	        // Your implementation here
+	        std::cout << "Base method override called" << std::endl;
+
 			std::vector<std::pair<int, int> > assoInit;
 			for (int i1 = 0; i1 < v1.size(); ++i1) {
 				for (int i2 = 0; i2 < v2.size(); ++i2) {
@@ -75,8 +72,26 @@ namespace falkolib {
 					}
 				}
 			}
-
-			return getBestMatching(v1, v2, assoInit, match);
+			TwoDTransform temp;
+	        return getBestMatching(v1, v2, assoInit, match, temp);
+	    }
+		/**
+		 * @brief match keypoints between two sets using AHT matcher
+		 * @param v1 first set of keypoints
+		 * @param v2 second set of keypoints
+		 * @param match matching vector representing associations, pair.first corresponds to v1 and pair.second corresponds to v2
+		 * @return number of valid association in match
+		 */
+		int match(const std::vector<T>& v1, const std::vector<T>& v2, std::vector<std::pair<int, int> >& match, TwoDTransform& transform) {
+			std::vector<std::pair<int, int> > assoInit;
+			for (int i1 = 0; i1 < v1.size(); ++i1) {
+				for (int i2 = 0; i2 < v2.size(); ++i2) {
+					if (v1[i1].distance(v2[i2]) < distTh) {
+						assoInit.push_back(std::make_pair(i1, i2));
+					}
+				}
+			}
+			return getBestMatching(v1, v2, assoInit, match, transform);
 		}
 
 		/**
@@ -88,7 +103,7 @@ namespace falkolib {
 		 * @param match matching vector representing associations, pair.first corresponds to v1 and pair.second corresponds to v2
 		 * @return number of valid association in match
 		 */
-		int match(const std::vector<T>& keypoints1, const std::vector<D>& descriptors1, const std::vector<T>& keypoints2, const std::vector<D>& descriptors2, std::vector<std::pair<int, int> >& match) {
+		int match(const std::vector<T>& keypoints1, const std::vector<D>& descriptors1, const std::vector<T>& keypoints2, const std::vector<D>& descriptors2, std::vector<std::pair<int, int> >& match, TwoDTransform& transform) {
 			std::vector<std::pair<int, int> > assoInit;
 			for (int i1 = 0; i1 < keypoints1.size(); ++i1) {
 				for (int i2 = 0; i2 < keypoints2.size(); ++i2) {
@@ -137,7 +152,7 @@ namespace falkolib {
 		}
 
 		/** @brief get best matching given point and an initial guest associations list*/
-		int getBestMatching(const std::vector<T>& v1, const std::vector<T>& v2, const std::vector<std::pair<int, int> >& init, std::vector<std::pair<int, int> >& match) {
+		int getBestMatching(const std::vector<T>& v1, const std::vector<T>& v2, const std::vector<std::pair<int, int> >& init, std::vector<std::pair<int, int> >& match, TwoDTransform& transform) {
 			for (auto& asso : init) {
 				for (int it = 0; it < thetaSize; ++it) {
 					double theta = thetaRes * (it - thetaSize / 2);
@@ -161,6 +176,10 @@ namespace falkolib {
 					}
 				}
 			}
+			// Get the best transform values!
+			transform.x_ = (txMax-xSize/2)*xRes;	
+			transform.y_ = (tyMax-ySize/2)*yRes;
+			transform.th_ = thetaRes * (thetaMax - thetaSize / 2);
 
 			match = matchesGrid[getGridIndex(txMax, tyMax, thetaMax)];
 			int numAsso = match.size();
